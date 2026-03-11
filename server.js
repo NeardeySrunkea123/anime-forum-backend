@@ -43,7 +43,7 @@ pool.query('SELECT NOW()', (err, res) => {
 
 app.post('/api/anime/sync', async (req, res) => {
   try {
-    const response = await fetch('http://localhost:8003/api/anime');
+    const response = await fetch('http://152.42.220.220:8083/api/anime');
 
     if (!response.ok) {
       return res.status(500).json({
@@ -90,7 +90,7 @@ app.post('/api/anime/sync', async (req, res) => {
 // GET all anime
 app.get('/api/anime', async (req, res) => {
   try {
-    const response = await fetch('http://localhost:8083/api/anime');
+    const response = await fetch('http://152.42.220.220:8083/api/anime');
 
     if (!response.ok) {
       return res.status(500).json({
@@ -134,7 +134,7 @@ app.get('/api/anime/:id', async (req, res) => {
   try {
     const { id } = req.params;
 
-    const response = await fetch('http://localhost:8083/api/anime');
+    const response = await fetch('http://152.42.220.220:8083/api/anime');
 
     if (!response.ok) {
       return res.status(500).json({
