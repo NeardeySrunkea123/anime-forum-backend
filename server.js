@@ -318,7 +318,7 @@ app.get("/api/threads", async (req, res) => {
   }
 });
 
-// GET single thread with details
+
 app.get("/api/threads/:id", async (req, res) => {
   try {
     const response = await fetch(`${REMOTE_API_BASE}/threads/${req.params.id}`);
@@ -326,33 +326,6 @@ app.get("/api/threads/:id", async (req, res) => {
     res.status(response.status).json(result);
   } catch (error) {
     console.error("Error fetching thread:", error);
-    res.status(500).json({ success: false, error: error.message });
-  }
-});
-
-
-// GET posts for a thread
-app.get('/api/threads/:threadId/posts', async (req, res) => {
-  try {
-    const { threadId } = req.params;
-    const result = await pool.query(
-      `SELECT p.*, 
-              u.username as author_username,
-              u.avatar_url as author_avatar,
-              u.role as author_role,
-              COUNT(pl.id) as like_count
-       FROM posts p
-       JOIN users u ON p.user_id = u.id
-       LEFT JOIN post_likes pl ON p.id = pl.post_id
-       WHERE p.thread_id = $1 AND p.is_active = true
-       GROUP BY p.id, u.username, u.avatar_url, u.role
-       ORDER BY p.created_at ASC`,
-      [threadId]
-    );
-    
-    res.json({ success: true, data: result.rows, count: result.rows.length });
-  } catch (error) {
-    console.error('Error fetching posts:', error);
     res.status(500).json({ success: false, error: error.message });
   }
 });
@@ -380,32 +353,6 @@ app.get("/dashboard/anime", async (req, res) => {
 
 
 // ============= POST LIKES ROUTES =============
-
-// POST like a post
-app.post('/api/posts/:postId/like', async (req, res) => {
-  try {
-    const { postId } = req.params;
-    const { user_id } = req.body;
-    
-    const result = await pool.query(
-      `INSERT INTO post_likes (post_id, user_id) 
-       VALUES ($1, $2) 
-       ON CONFLICT (post_id, user_id) DO NOTHING
-       RETURNING *`,
-      [postId, user_id]
-    );
-    
-    if (result.rows.length === 0) {
-      return res.json({ success: true, message: 'Already liked' });
-    }
-    
-    res.status(201).json({ success: true, data: result.rows[0] });
-  } catch (error) {
-    console.error('Error liking post:', error);
-    res.status(500).json({ success: false, error: error.message });
-  }
-});
-
 app.get('/api/posts/:postId/likes', async (req, res) => {
   try {
     const { postId } = req.params;
@@ -443,6 +390,29 @@ app.get('/api/posts/:postId/like/:userId', async (req, res) => {
     });
   } catch (error) {
     console.error('Error checking like:', error);
+    res.status(500).json({ success: false, error: error.message });
+  }
+});
+
+app.get('/api/posts/:postId/likes/users', async (req, res) => {
+  try {
+    const { postId } = req.params;
+
+    const result = await pool.query(
+      `SELECT u.id, u.username, u.avatar_url
+       FROM post_likes pl
+       JOIN users u ON pl.user_id = u.id
+       WHERE pl.post_id = $1`,
+      [postId]
+    );
+
+    res.json({
+      success: true,
+      data: result.rows,
+      count: result.rows.length
+    });
+  } catch (error) {
+    console.error('Error fetching likes users:', error);
     res.status(500).json({ success: false, error: error.message });
   }
 });
