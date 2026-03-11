@@ -3,7 +3,7 @@ const router = express.Router();
 
 router.get('/dashboard/anime', async (req, res) => {
   try {
-    const response = await fetch("http://localhost:3003/api/anime");
+    const response = await fetch("http://152.42.177.225/api/anime");
     const result = await response.json();
 
     if (!result.success) {
@@ -23,7 +23,7 @@ module.exports = router;
 
 app.get("/anime", async (req, res) => {
   try {
-    const response = await fetch("http://localhost:3003/api/anime");
+    const response = await fetch("http://152.42.177.225/api/anime");
     const result = await response.json();
 
     if (!result.success) {

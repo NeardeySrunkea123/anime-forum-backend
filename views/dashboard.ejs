@@ -192,6 +192,10 @@
             }[c]));
         }
 
+        function normalize(payload) {
+            return Array.isArray(payload) ? payload : payload.data || [];
+        }
+
         function badge(status) {
             const s = String(status || "").toLowerCase();
             const cls =
@@ -200,100 +204,221 @@
                         s === "upcoming" ? "bg-purple-50 text-purple-700 border-purple-200" :
                             "bg-gray-100 text-gray-700 border-gray-200";
 
-            return `<span class="px-2.5 py-1 rounded-full border text-xs font-medium ${cls}">${esc(status || "unknown")}</span>`;
-        }
-
-        function boolBadge(v) {
-            return v
-                ? `<span class="px-2.5 py-1 rounded-full border text-xs font-medium bg-yellow-50 text-yellow-700 border-yellow-200">Pinned</span>`
-                : `<span class="px-2.5 py-1 rounded-full border text-xs font-medium bg-gray-100 text-gray-600 border-gray-200">No</span>`;
+            return `<span class="px-2.5 py-1 rounded-full border text-xs font-medium ${cls}">
+                    ${esc(status || "Unknown")}
+                </span>`;
         }
 
         function barRow(label, value, total) {
             const pct = total ? Math.round((value / total) * 100) : 0;
             return `
-                <div>
-                    <div class="flex items-center justify-between text-sm">
-                        <span class="font-medium text-gray-800">${esc(label || "unknown")}</span>
-                        <span class="text-gray-500">${value} (${pct}%)</span>
+                    <div>
+                        <div class="flex items-center justify-between text-sm">
+                            <span class="font-medium text-gray-800">${esc(label || "Unknown")}</span>
+                            <span class="text-gray-500">${value} (${pct}%)</span>
+                        </div>
+                        <div class="mt-2 h-2.5 rounded-full bg-gray-100 overflow-hidden">
+                            <div class="h-2.5 bg-blue-500 rounded-full" style="width:${pct}%"></div>
+                        </div>
                     </div>
-                    <div class="mt-2 h-2.5 rounded-full bg-gray-100 overflow-hidden">
-                        <div class="h-2.5 bg-blue-500 rounded-full" style="width:${pct}%"></div>
-                    </div>
-                </div>
-            `;
+                `;
         }
 
         (async () => {
+            const loading = document.getElementById("loading");
+            const content = document.getElementById("content");
+            const errorBox = document.getElementById("errorBox");
 
-                const loading = document.getElementById("loading");
-                const content = document.getElementById("content");
-                const errorBox = document.getElementById("errorBox");
+            try {
+                const [animeRes, threadsRes, usersRes, forumsRes] = await Promise.all([
+                    fetch("/api/anime"),
+                    fetch("/api/threads"),
+                    fetch("/api/users"),
+                    fetch("/api/forums")
+                ]);
 
-                try {
+                const animeData = await animeRes.json();
+                const threadsData = await threadsRes.json();
+                const usersData = await usersRes.json();
+                const forumsData = await forumsRes.json();
 
-                    const [animeRes, threadsRes] = await Promise.all([
-                        fetch("/api/anime"),
-                        fetch("/api/threads")
-                    ]);
+                const anime = normalize(animeData);
+                const threads = normalize(threadsData);
+                const users = normalize(usersData);
+                const forums = normalize(forumsData);
 
-                    const animeData = await animeRes.json();
-                    const threadsData = await threadsRes.json();
+                document.getElementById("generatedAt").textContent = new Date().toLocaleString();
 
-                    const anime = animeData.data || [];
-                    const threads = threadsData.data || [];
+                // =========================
+                // Top stats
+                // =========================
+                document.getElementById("totalUsers").textContent = users.length;
+                document.getElementById("totalAnime").textContent = anime.length;
+                document.getElementById("totalForums").textContent = forums.length;
+                document.getElementById("totalThreads").textContent = threads.length;
 
-                    // cards
-                    document.getElementById("totalAnime").textContent = anime.length;
-                    document.getElementById("totalThreads").textContent = threads.length;
+                let totalPosts = 0;
+                threads.forEach(t => {
+                    totalPosts += Number(t.post_count || 0);
+                });
 
-                    // compute posts + likes
-                    let totalPosts = 0;
-                    let totalViews = 0;
+                document.getElementById("totalPosts").textContent = totalPosts;
 
-                    threads.forEach(t => {
-                        totalPosts += Number(t.post_count || 0);
-                        totalViews += Number(t.views || 0);
-                    });
+                // No real likes field in /api/threads right now
+                document.getElementById("totalLikes").textContent = "0";
 
-                    document.getElementById("totalPosts").textContent = totalPosts;
-                    document.getElementById("totalLikes").textContent = totalViews;
+                // =========================
+                // Top Threads by Engagement
+                // =========================
+                const topThreads = [...threads]
+                    .sort((a, b) => {
+                        const scoreA = Number(a.views || 0) + Number(a.post_count || 0) * 5;
+                        const scoreB = Number(b.views || 0) + Number(b.post_count || 0) * 5;
+                        return scoreB - scoreA;
+                    })
+                    .slice(0, 10);
 
-                    // render thread table
-                    document.getElementById("threadsReportBody").innerHTML =
-                        threads.map(t => `
-            <tr class="hover:bg-gray-50">
-                <td class="px-6 py-4 font-medium text-gray-800">${t.title}</td>
-                <td class="px-6 py-4">${t.author_username}</td>
-                <td class="px-6 py-4">${t.anime_title}</td>
-                <td class="px-6 py-4">${t.forum_name}</td>
-                <td class="px-6 py-4">${t.views}</td>
-                <td class="px-6 py-4">${t.post_count}</td>
-                <td class="px-6 py-4">${t.is_pinned ? "Pinned" : "-"}</td>
-            </tr>
-        `).join("");
+                document.getElementById("engagementBody").innerHTML =
+                    topThreads.length > 0
+                        ? topThreads.map(t => `
+                                <tr class="hover:bg-gray-50">
+                                    <td class="px-6 py-4 font-medium text-gray-800">${esc(t.title)}</td>
+                                    <td class="px-6 py-4">${esc(t.forum_name)}</td>
+                                    <td class="px-6 py-4">${esc(t.anime_title)}</td>
+                                    <td class="px-6 py-4">${Number(t.views || 0)}</td>
+                                    <td class="px-6 py-4">${Number(t.post_count || 0)}</td>
+                                    <td class="px-6 py-4">0</td>
+                                </tr>
+                            `).join("")
+                        : `
+                                <tr>
+                                    <td colspan="6" class="px-6 py-8 text-center text-gray-500">
+                                        No thread engagement data found.
+                                    </td>
+                                </tr>
+                            `;
 
-                    // anime cards
-                    document.getElementById("animeApiGrid").innerHTML =
-                        anime.map(a => `
-            <div class="bg-white rounded-xl shadow p-3">
-                <img src="${a.poster_url || a.large_image_url || ''}" class="rounded mb-2">
-                <div class="font-semibold text-sm">${a.title}</div>
-                <div class="text-xs text-gray-500">${a.status}</div>
-            </div>
-        `).join("");
+                // =========================
+                // Most Active Forums
+                // =========================
+                const forumMap = {};
 
-                    loading.classList.add("hidden");
-                    content.classList.remove("hidden");
+                threads.forEach(t => {
+                    const forumName = t.forum_name || "Unknown";
 
-                } catch (err) {
-                    console.error(err);
-                    loading.classList.add("hidden");
-                    errorBox.textContent = err.message;
-                    errorBox.classList.remove("hidden");
-                }
+                    if (!forumMap[forumName]) {
+                        forumMap[forumName] = {
+                            name: forumName,
+                            threads: 0,
+                            posts: 0
+                        };
+                    }
 
-            })();
+                    forumMap[forumName].threads += 1;
+                    forumMap[forumName].posts += Number(t.post_count || 0);
+                });
+
+                const activeForums = Object.values(forumMap).sort((a, b) => {
+                    const scoreA = a.threads + a.posts;
+                    const scoreB = b.threads + b.posts;
+                    return scoreB - scoreA;
+                });
+
+                document.getElementById("activeForumsBody").innerHTML =
+                    activeForums.length > 0
+                        ? activeForums.map(f => `
+                                <tr class="hover:bg-gray-50">
+                                    <td class="px-6 py-4 font-medium text-gray-800">${esc(f.name)}</td>
+                                    <td class="px-6 py-4">${f.threads}</td>
+                                    <td class="px-6 py-4">${f.posts}</td>
+                                </tr>
+                            `).join("")
+                        : `
+                                <tr>
+                                    <td colspan="3" class="px-6 py-8 text-center text-gray-500">
+                                        No forum activity data found.
+                                    </td>
+                                </tr>
+                            `;
+
+                // =========================
+                // Anime Status Distribution
+                // =========================
+                const statusMap = {};
+
+                anime.forEach(a => {
+                    const status = a.status || "Unknown";
+                    statusMap[status] = (statusMap[status] || 0) + 1;
+                });
+
+                const statusEntries = Object.entries(statusMap).map(([label, value]) => ({
+                    label,
+                    value
+                }));
+
+                const totalStatus = statusEntries.reduce((sum, item) => sum + item.value, 0);
+
+                document.getElementById("animeStatusDistribution").innerHTML =
+                    statusEntries.length > 0
+                        ? statusEntries.map(item => barRow(item.label, item.value, totalStatus)).join("")
+                        : `<div class="text-sm text-gray-500">No anime status data found.</div>`;
+
+                // =========================
+                // Threads Report
+                // =========================
+                document.getElementById("threadsReportBody").innerHTML =
+                    threads.length > 0
+                        ? threads.map(t => `
+                                <tr class="hover:bg-gray-50">
+                                    <td class="px-6 py-4 font-medium text-gray-800">${esc(t.title)}</td>
+                                    <td class="px-6 py-4">${esc(t.author_username)}</td>
+                                    <td class="px-6 py-4">${esc(t.anime_title)}</td>
+                                    <td class="px-6 py-4">${esc(t.forum_name)}</td>
+                                    <td class="px-6 py-4">${Number(t.views || 0)}</td>
+                                    <td class="px-6 py-4">${Number(t.post_count || 0)}</td>
+                                    <td class="px-6 py-4">${t.is_pinned ? "Pinned" : "-"}</td>
+                                </tr>
+                            `).join("")
+                        : `
+                                <tr>
+                                    <td colspan="7" class="px-6 py-8 text-center text-gray-500">
+                                        No threads found.
+                                    </td>
+                                </tr>
+                            `;
+
+                // =========================
+                // Anime API Report
+                // =========================
+                document.getElementById("animeApiGrid").innerHTML =
+                    anime.length > 0
+                        ? anime.map(a => `
+                                <div class="bg-white rounded-xl shadow p-3 border border-gray-100">
+                                    <img
+                                        src="${esc(a.poster_url || a.large_image_url || a.image_url || "")}"
+                                        alt="${esc(a.title)}"
+                                        class="rounded-lg mb-3 w-full h-56 object-cover bg-gray-100"
+                                    >
+                                    <div class="font-semibold text-sm text-gray-800">${esc(a.title)}</div>
+                                    <div class="mt-2">${badge(a.status)}</div>
+                                </div>
+                            `).join("")
+                        : `
+                                <div class="col-span-full text-center text-gray-500 py-10">
+                                    No anime data found.
+                                </div>
+                            `;
+
+                loading.classList.add("hidden");
+                content.classList.remove("hidden");
+
+            } catch (err) {
+                console.error(err);
+                loading.classList.add("hidden");
+                errorBox.textContent = err.message || "Failed to load dashboard";
+                errorBox.classList.remove("hidden");
+            }
+        })();
     </script>
 </body>
 

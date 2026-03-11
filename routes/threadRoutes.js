@@ -23,7 +23,7 @@ router.post('/threads', async (req, res) => {
     }
 
     // 1) Validate anime from core system
-    const animeListRes = await fetch('http://localhost:3003/api/anime');
+    const animeListRes = await fetch('http://152.42.177.225/api/anime');
 
     if (!animeListRes.ok) {
       return res.status(500).json({
