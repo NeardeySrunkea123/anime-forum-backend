@@ -1,0 +1,138 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Add Anime - Anime Forum Admin</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+</head>
+
+<body class="bg-gray-100">
+    <div class="flex h-screen">
+        <!-- Sidebar -->
+        <aside class="w-64 bg-white shadow flex flex-col">
+            <div class="p-6 text-center border-b">
+                <h1 class="text-xl font-bold text-blue-600">Anime Forum Admin</h1>
+            </div>
+
+            <nav class="flex-1 px-4 py-6 space-y-2">
+                <a href="/dashboard" class="block px-4 py-2 rounded-lg text-gray-700 hover:bg-gray-100">Dashboard</a>
+                <a href="/users" class="block px-4 py-2 rounded-lg text-gray-700 hover:bg-gray-100">Users</a>
+                <a href="/dashboard/anime" class="block px-4 py-2 rounded-lg text-gray-700 hover:bg-gray-100">Anime</a>
+            </nav>
+
+            <div class="p-4 text-xs text-gray-500 border-t text-center">
+                © 2026 Anime Forum
+            </div>
+        </aside>
+
+        <!-- Main -->
+        <main class="flex-1 p-8 overflow-y-auto">
+            <!-- Header -->
+            <div class="flex items-center justify-between mb-6">
+                <div>
+                    <h2 class="text-2xl font-bold text-gray-800">➕ Add New Anime</h2>
+                    <p class="text-sm text-gray-500">Create anime records used across the forum threads.</p>
+                </div>
+                <a href="/dashboard/anime" class="px-4 py-2 rounded-lg border bg-white text-gray-700 hover:bg-gray-50">
+                    ← Back to list
+                </a>
+            </div>
+
+            <!-- Form Card -->
+            <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
+                <!-- Form -->
+                <div class="lg:col-span-2 bg-white rounded-xl shadow p-6">
+                    <!-- Error box (optional) -->
+                    <% if (typeof error !=="undefined" && error) { %>
+                        <div class="mb-4 rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
+                            <%= error %>
+                        </div>
+                        <% } %>
+
+                            <form action="/admin/anime/create" method="POST" class="space-y-4">
+                                <!-- Title -->
+                                <div>
+                                    <label class="block text-sm font-medium text-gray-700 mb-1">Title</label>
+                                    <input type="text" name="title" required placeholder="e.g., Naruto"
+                                        class="w-full border border-gray-300 rounded-lg px-4 py-2 bg-white focus:ring-2 focus:ring-blue-500 outline-none" />
+                                    <p class="text-xs text-gray-400 mt-1">This is what users will see in the forum.</p>
+                                </div>
+
+                                <!-- Poster URL -->
+                                <div>
+                                    <label class="block text-sm font-medium text-gray-700 mb-1">Poster URL</label>
+                                    <input type="url" name="poster_url" placeholder="https://example.com/naruto.jpg"
+                                        class="w-full border border-gray-300 rounded-lg px-4 py-2 bg-white focus:ring-2 focus:ring-blue-500 outline-none" />
+                                    <p class="text-xs text-gray-400 mt-1">Use a public image URL for now.</p>
+                                </div>
+
+                                <!-- Status -->
+                                <div>
+                                    <label class="block text-sm font-medium text-gray-700 mb-1">Status</label>
+                                    <select name="status"
+                                        class="w-full border border-gray-300 rounded-lg px-4 py-2 bg-white focus:ring-2 focus:ring-blue-500 outline-none">
+                                        <option value="ongoing">Ongoing</option>
+                                        <option value="completed">Completed</option>
+                                        <option value="upcoming">Upcoming</option>
+                                    </select>
+                                </div>
+
+                                <!-- Actions -->
+                                <div class="pt-4 flex items-center gap-3">
+                                    <button type="submit"
+                                        class="bg-blue-600 text-white px-5 py-2 rounded-lg hover:bg-blue-700 font-medium">
+                                        Save Anime
+                                    </button>
+
+                                    <a href="/dashboard/anime"
+                                        class="px-5 py-2 rounded-lg border bg-white text-gray-700 hover:bg-gray-50">
+                                        Cancel
+                                    </a>
+                                </div>
+                            </form>
+                </div>
+
+                <!-- Preview -->
+                <div class="bg-white rounded-xl shadow p-6">
+                    <h3 class="font-semibold text-gray-800 mb-3">Live Preview (static)</h3>
+
+                    <div class="border rounded-xl overflow-hidden">
+                        <div class="bg-gray-50 px-4 py-3 text-sm text-gray-600 border-b">
+                            Preview card
+                        </div>
+
+                        <div class="p-4 flex gap-4">
+                            <div
+                                class="w-16 h-24 rounded-lg bg-gray-100 border flex items-center justify-center text-xs text-gray-400">
+                                Poster
+                            </div>
+
+                            <div class="flex-1">
+                                <div class="text-sm text-gray-500">Title</div>
+                                <div class="text-lg font-bold text-gray-800">Your anime title</div>
+
+                                <div
+                                    class="mt-3 inline-flex items-center px-2 py-1 rounded border text-xs bg-blue-50 text-blue-700 border-blue-200">
+                                    Status
+                                </div>
+
+                                <div class="text-xs text-gray-400 mt-3">
+                                    This record will be linked to threads via <code
+                                        class="bg-gray-100 px-1 rounded">anime_uuid</code>.
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="mt-4 text-xs text-gray-500">
+                        Tip: Later you can add image upload using Multer, but URL is easiest for now.
+                    </div>
+                </div>
+            </div>
+        </main>
+    </div>
+</body>
+
+</html>

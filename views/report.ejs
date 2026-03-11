@@ -1,0 +1,338 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Admin Dashboard - Anime Forum</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+</head>
+
+<body class="bg-gray-100">
+    <div class="flex h-screen">
+
+        <!-- Sidebar -->
+        <aside class="w-64 bg-white shadow flex flex-col">
+            <div class="p-6 text-center border-b">
+                <h1 class="text-xl font-bold text-blue-600">Anime Forum Admin</h1>
+            </div>
+
+            <nav class="flex-1 px-4 py-6 space-y-2">
+                <a href="/reports" class="block px-4 py-2 rounded-lg text-gray-700 hover:bg-gray-100">Dashboard</a>
+                <a href="/users" class="block px-4 py-2 rounded-lg text-gray-700 hover:bg-gray-100">Users</a>
+                <a href="/dashboard/anime" class="block px-4 py-2 rounded-lg text-gray-700 hover:bg-gray-100">Anime</a>
+            </nav>
+
+            <div class="p-4 text-xs text-gray-500 border-t text-center">
+                © 2026 Anime Forum
+            </div>
+        </aside>
+
+        <!-- Main -->
+        <main class="flex-1 p-8 overflow-y-auto">
+            <!-- Header -->
+            <div class="flex flex-col md:flex-row md:items-center md:justify-between gap-4 mb-6">
+                <div>
+                    <h2 class="text-2xl font-bold text-gray-800">Dashboard</h2>
+                    <p class="text-sm text-gray-500">Overview report from backend analytics</p>
+                </div>
+
+                <div class="text-sm text-gray-500">
+                    Generated at:
+                    <span id="generatedAt" class="font-medium text-gray-800">—</span>
+                </div>
+            </div>
+
+            <!-- Loading + Error -->
+            <div id="loading" class="bg-white rounded-xl shadow p-6 text-gray-600">
+                Loading dashboard report...
+            </div>
+
+            <div id="errorBox" class="hidden bg-red-50 border border-red-200 text-red-700 rounded-xl p-4 mb-6"></div>
+
+            <!-- Content Wrapper -->
+            <div id="content" class="hidden space-y-6">
+
+                <!-- Stats Cards -->
+                <section>
+                    <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-6 gap-4">
+                        <div class="bg-white rounded-xl shadow p-4">
+                            <div class="text-xs text-gray-500">Total Users</div>
+                            <div id="totalUsers" class="text-2xl font-bold text-gray-800 mt-1">0</div>
+                        </div>
+                        <div class="bg-white rounded-xl shadow p-4">
+                            <div class="text-xs text-gray-500">Total Anime</div>
+                            <div id="totalAnime" class="text-2xl font-bold text-gray-800 mt-1">0</div>
+                        </div>
+                        <div class="bg-white rounded-xl shadow p-4">
+                            <div class="text-xs text-gray-500">Forums</div>
+                            <div id="totalForums" class="text-2xl font-bold text-gray-800 mt-1">0</div>
+                        </div>
+                        <div class="bg-white rounded-xl shadow p-4">
+                            <div class="text-xs text-gray-500">Threads</div>
+                            <div id="totalThreads" class="text-2xl font-bold text-gray-800 mt-1">0</div>
+                        </div>
+                        <div class="bg-white rounded-xl shadow p-4">
+                            <div class="text-xs text-gray-500">Posts</div>
+                            <div id="totalPosts" class="text-2xl font-bold text-gray-800 mt-1">0</div>
+                        </div>
+                        <div class="bg-white rounded-xl shadow p-4">
+                            <div class="text-xs text-gray-500">Likes</div>
+                            <div id="totalLikes" class="text-2xl font-bold text-gray-800 mt-1">0</div>
+                        </div>
+                    </div>
+                </section>
+
+                <!-- Two columns -->
+                <section class="grid grid-cols-1 lg:grid-cols-3 gap-6">
+                    <!-- Most Popular Anime -->
+                    <div class="bg-white rounded-xl shadow overflow-hidden lg:col-span-2">
+                        <div class="px-6 py-4 border-b flex items-center justify-between">
+                            <h3 class="font-semibold text-gray-800">Most Popular Anime</h3>
+                            <span class="text-xs text-gray-500">Top 10</span>
+                        </div>
+                        <div class="overflow-x-auto">
+                            <table class="w-full text-sm text-left">
+                                <thead class="bg-gray-50 text-gray-600 uppercase text-xs">
+                                    <tr>
+                                        <th class="px-6 py-3">Anime</th>
+                                        <th class="px-6 py-3">Status</th>
+                                        <th class="px-6 py-3">Threads</th>
+                                        <th class="px-6 py-3">Views</th>
+                                    </tr>
+                                </thead>
+                                <tbody id="popularAnimeBody" class="divide-y"></tbody>
+                            </table>
+                        </div>
+                    </div>
+
+                    <!-- Role Distribution -->
+                    <div class="bg-white rounded-xl shadow overflow-hidden">
+                        <div class="px-6 py-4 border-b flex items-center justify-between">
+                            <h3 class="font-semibold text-gray-800">User Roles</h3>
+                            <span class="text-xs text-gray-500">Distribution</span>
+                        </div>
+                        <div id="roleDistribution" class="p-6 space-y-3"></div>
+                    </div>
+                </section>
+
+                <!-- Activity + Engagement -->
+                <section class="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                    <!-- Recent Activity -->
+                    <div class="bg-white rounded-xl shadow overflow-hidden">
+                        <div class="px-6 py-4 border-b">
+                            <h3 class="font-semibold text-gray-800">Recent Activity</h3>
+                            <p class="text-xs text-gray-500 mt-1">Latest threads created</p>
+                        </div>
+                        <div id="recentActivity" class="p-6 space-y-4"></div>
+                    </div>
+
+                    <!-- Top Threads by Engagement -->
+                    <div class="bg-white rounded-xl shadow overflow-hidden">
+                        <div class="px-6 py-4 border-b">
+                            <h3 class="font-semibold text-gray-800">Top Threads (Engagement)</h3>
+                            <p class="text-xs text-gray-500 mt-1">Views, replies, likes</p>
+                        </div>
+                        <div class="overflow-x-auto">
+                            <table class="w-full text-sm text-left">
+                                <thead class="bg-gray-50 text-gray-600 uppercase text-xs">
+                                    <tr>
+                                        <th class="px-6 py-3">Thread</th>
+                                        <th class="px-6 py-3">Forum</th>
+                                        <th class="px-6 py-3">Anime</th>
+                                        <th class="px-6 py-3">Views</th>
+                                        <th class="px-6 py-3">Replies</th>
+                                        <th class="px-6 py-3">Likes</th>
+                                    </tr>
+                                </thead>
+                                <tbody id="engagementBody" class="divide-y"></tbody>
+                            </table>
+                        </div>
+                    </div>
+                </section>
+
+                <!-- Forums + Anime Status -->
+                <section class="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                    <!-- Most Active Forums -->
+                    <div class="bg-white rounded-xl shadow overflow-hidden">
+                        <div class="px-6 py-4 border-b flex items-center justify-between">
+                            <h3 class="font-semibold text-gray-800">Most Active Forums</h3>
+                            <span class="text-xs text-gray-500">Threads + Posts</span>
+                        </div>
+                        <div class="overflow-x-auto">
+                            <table class="w-full text-sm text-left">
+                                <thead class="bg-gray-50 text-gray-600 uppercase text-xs">
+                                    <tr>
+                                        <th class="px-6 py-3">Forum</th>
+                                        <th class="px-6 py-3">Threads</th>
+                                        <th class="px-6 py-3">Posts</th>
+                                    </tr>
+                                </thead>
+                                <tbody id="activeForumsBody" class="divide-y"></tbody>
+                            </table>
+                        </div>
+                    </div>
+
+                    <!-- Anime Status Distribution -->
+                    <div class="bg-white rounded-xl shadow overflow-hidden">
+                        <div class="px-6 py-4 border-b flex items-center justify-between">
+                            <h3 class="font-semibold text-gray-800">Anime Status</h3>
+                            <span class="text-xs text-gray-500">Distribution</span>
+                        </div>
+                        <div id="animeStatusDistribution" class="p-6 space-y-3"></div>
+                    </div>
+                </section>
+
+            </div>
+        </main>
+    </div>
+
+    <script>
+        function esc(s) {
+            return String(s ?? "").replace(/[&<>"']/g, (c) => ({
+                "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;"
+            }[c]));
+        }
+
+        function badge(status) {
+            const s = String(status || "").toLowerCase();
+            const cls =
+                s === "ongoing" ? "bg-green-50 text-green-700 border-green-200" :
+                    s === "completed" ? "bg-blue-50 text-blue-700 border-blue-200" :
+                        s === "upcoming" ? "bg-purple-50 text-purple-700 border-purple-200" :
+                            "bg-gray-100 text-gray-700 border-gray-200";
+            return `<span class="px-2 py-1 rounded border text-xs ${cls}">${esc(status || "unknown")}</span>`;
+        }
+
+        function barRow(label, value, total) {
+            const pct = total ? Math.round((value / total) * 100) : 0;
+            return `
+        <div>
+          <div class="flex items-center justify-between text-sm">
+            <span class="font-medium text-gray-800">${esc(label)}</span>
+            <span class="text-gray-500">${value} (${pct}%)</span>
+          </div>
+          <div class="mt-2 h-2 rounded bg-gray-100 overflow-hidden">
+            <div class="h-2 bg-blue-500" style="width:${pct}%"></div>
+          </div>
+        </div>
+      `;
+        }
+
+        (async () => {
+            const loading = document.getElementById("loading");
+            const content = document.getElementById("content");
+            const errorBox = document.getElementById("errorBox");
+
+            try {
+                const res = await fetch("/api/dashboard/report", { cache: "no-store" });
+                const data = await res.json();
+                if (!res.ok || !data.success) throw new Error(data.error || "Failed to load report");
+
+                // header
+                document.getElementById("generatedAt").textContent =
+                    new Date(data.generated_at).toLocaleString();
+
+                // stats
+                const s = data.statistics || {};
+                document.getElementById("totalUsers").textContent = s.total_users ?? 0;
+                document.getElementById("totalAnime").textContent = s.total_anime ?? 0;
+                document.getElementById("totalForums").textContent = s.total_forums ?? 0;
+                document.getElementById("totalThreads").textContent = s.total_threads ?? 0;
+                document.getElementById("totalPosts").textContent = s.total_posts ?? 0;
+                document.getElementById("totalLikes").textContent = s.total_likes ?? 0;
+
+                // popular anime
+                const popular = Array.isArray(data.most_popular_anime) ? data.most_popular_anime : [];
+                document.getElementById("popularAnimeBody").innerHTML = popular.map(a => `
+          <tr class="hover:bg-gray-50">
+            <td class="px-6 py-4">
+              <div class="flex items-center gap-3">
+                <div class="w-10 h-14 rounded-md overflow-hidden border bg-gray-100 shrink-0">
+                  ${a.poster_url ? `<img src="${esc(a.poster_url)}" class="w-full h-full object-cover" />` : `<div class="w-full h-full flex items-center justify-center text-xs text-gray-400">No</div>`}
+                </div>
+                <div class="min-w-0">
+                  <div class="font-semibold text-gray-800 truncate">${esc(a.title)}</div>
+                  <div class="text-xs text-gray-500 truncate">${esc(a.uuid)}</div>
+                </div>
+              </div>
+            </td>
+            <td class="px-6 py-4">${badge(a.status)}</td>
+            <td class="px-6 py-4">${Number(a.thread_count || 0)}</td>
+            <td class="px-6 py-4">${Number(a.total_views || 0)}</td>
+          </tr>
+        `).join("");
+
+                // roles
+                const roles = Array.isArray(data.user_role_distribution) ? data.user_role_distribution : [];
+                const totalRole = roles.reduce((sum, r) => sum + Number(r.count || 0), 0);
+                document.getElementById("roleDistribution").innerHTML =
+                    roles.length
+                        ? roles.map(r => barRow(r.role, Number(r.count || 0), totalRole)).join("")
+                        : `<div class="text-sm text-gray-500">No data</div>`;
+
+                // recent activity
+                const recent = Array.isArray(data.recent_activity) ? data.recent_activity : [];
+                document.getElementById("recentActivity").innerHTML =
+                    recent.length
+                        ? recent.map(x => `
+              <div class="flex items-start gap-3">
+                <div class="w-10 h-10 rounded-full bg-blue-50 border border-blue-100 flex items-center justify-center shrink-0">
+                  <span>🧵</span>
+                </div>
+                <div class="min-w-0">
+                  <div class="font-semibold text-gray-800 truncate">${esc(x.title)}</div>
+                  <div class="text-xs text-gray-500 mt-1">
+                    <span class="font-medium text-gray-700">${esc(x.username)}</span>
+                    • ${esc(x.anime_title)}
+                    • ${new Date(x.created_at).toLocaleString()}
+                  </div>
+                </div>
+              </div>
+            `).join("")
+                        : `<div class="text-sm text-gray-500">No recent activity</div>`;
+
+                // engagement
+                const top = Array.isArray(data.top_threads_by_engagement) ? data.top_threads_by_engagement : [];
+                document.getElementById("engagementBody").innerHTML = top.map(t => `
+          <tr class="hover:bg-gray-50">
+            <td class="px-6 py-4 font-medium text-gray-800">${esc(t.title)}</td>
+            <td class="px-6 py-4">${esc(t.forum_name)}</td>
+            <td class="px-6 py-4">${esc(t.anime_title)}</td>
+            <td class="px-6 py-4">${Number(t.views || 0)}</td>
+            <td class="px-6 py-4">${Number(t.reply_count || 0)}</td>
+            <td class="px-6 py-4">${Number(t.like_count || 0)}</td>
+          </tr>
+        `).join("");
+
+                // forums
+                const forums = Array.isArray(data.most_active_forums) ? data.most_active_forums : [];
+                document.getElementById("activeForumsBody").innerHTML = forums.map(f => `
+          <tr class="hover:bg-gray-50">
+            <td class="px-6 py-4 font-medium text-gray-800">${esc(f.name)}</td>
+            <td class="px-6 py-4">${Number(f.thread_count || 0)}</td>
+            <td class="px-6 py-4">${Number(f.post_count || 0)}</td>
+          </tr>
+        `).join("");
+
+                // anime status distribution
+                const st = Array.isArray(data.anime_status_distribution) ? data.anime_status_distribution : [];
+                const totalSt = st.reduce((sum, r) => sum + Number(r.count || 0), 0);
+                document.getElementById("animeStatusDistribution").innerHTML =
+                    st.length
+                        ? st.map(r => barRow(r.status, Number(r.count || 0), totalSt)).join("")
+                        : `<div class="text-sm text-gray-500">No data</div>`;
+
+                loading.classList.add("hidden");
+                content.classList.remove("hidden");
+            } catch (e) {
+                console.error(e);
+                loading.classList.add("hidden");
+                errorBox.textContent = e.message || "Failed to load dashboard";
+                errorBox.classList.remove("hidden");
+            }
+        })();
+    </script>
+</body>
+
+</html>

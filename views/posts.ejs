@@ -1,0 +1,10 @@
+<h1>Posts Moderation</h1>
+<ul>
+    <% posts.forEach(post=> { %>
+        <li>
+            <%= post.title %> — <%= post.status %>
+        </li>
+        <% }) %>
+</ul>
+
+<a href=\"/admin\">Back</a>
