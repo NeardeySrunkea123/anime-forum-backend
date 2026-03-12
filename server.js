@@ -5,21 +5,21 @@ const { Pool } = pkg;
 import dotenv from 'dotenv';
 import path from "path";
 import { fileURLToPath } from "url";
+import bcrypt from 'bcrypt';
+
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 dotenv.config();
 
 const app = express();
-const PORT = process.env.PORT || 3000;
+const PORT = 'http://152.42.177.225' || 3003;
 
 // Middleware
 app.use(cors());
 app.use(express.json());
-
+app.use(express.urlencoded({ extended: true }));
 app.set("view engine", "ejs");
 app.set("views", "views");
-app.use(express.urlencoded({ extended: true }));
-
 
 // Database connection
 const pool = new Pool({
@@ -30,13 +30,9 @@ const pool = new Pool({
   port: process.env.DB_PORT || 5432,
 });
 
-// Test database connection
-pool.query('SELECT NOW()', (err, res) => {
-  if (err) {
-    console.error('Database connection error:', err);
-  } else {
-    console.log('Database connected successfully');
-  }
+pool.query('SELECT NOW()', (err) => {
+  if (err) console.error('Database connection error:', err);
+  else console.log('Database connected successfully');
 });
 
 
@@ -45,177 +41,97 @@ pool.query('SELECT NOW()', (err, res) => {
 app.post('/api/anime/sync', async (req, res) => {
   try {
     const response = await fetch('http://152.42.220.220/api/anime');
-
     if (!response.ok) {
-      return res.status(500).json({
-        success: false,
-        error: `Failed to fetch from core system. Status: ${response.status}`,
-      });
+      return res.status(500).json({ success: false, error: `Failed to fetch from core system. Status: ${response.status}` });
     }
-
     const coreData = await response.json();
     const animeList = Array.isArray(coreData) ? coreData : coreData.data || [];
 
     for (const item of animeList) {
       await pool.query(
-        `
-        INSERT INTO anime (uuid, title, poster_url, status, core_anime_id)
-        VALUES (gen_random_uuid(), $1, $2, $3, $4)
-        ON CONFLICT (core_anime_id)
-        DO UPDATE SET
-          title = EXCLUDED.title,
-          poster_url = EXCLUDED.poster_url,
-          status = EXCLUDED.status,
-          updated_at = NOW()
-        `,
-        [
-          item.title,
-          item.large_image_url || item.image_url || null,
-          item.status || null,
-          item.id,
-        ]
+        `INSERT INTO anime (uuid, title, poster_url, status, core_anime_id)
+         VALUES (gen_random_uuid(), $1, $2, $3, $4)
+         ON CONFLICT (core_anime_id)
+         DO UPDATE SET title = EXCLUDED.title, poster_url = EXCLUDED.poster_url, status = EXCLUDED.status, updated_at = NOW()`,
+        [item.title, item.large_image_url || item.image_url || null, item.status || null, item.id]
       );
     }
 
-    res.json({
-      success: true,
-      message: 'Anime synced successfully',
-      count: animeList.length,
-    });
+    res.json({ success: true, message: 'Anime synced successfully', count: animeList.length });
   } catch (error) {
     console.error('Error syncing anime:', error);
     res.status(500).json({ success: false, error: error.message });
   }
 });
 
-// GET all anime
 app.get('/api/anime', async (req, res) => {
   try {
     const response = await fetch('http://152.42.220.220/api/anime');
-
     if (!response.ok) {
-      return res.status(500).json({
-        success: false,
-        error: `Failed to fetch from core system. Status: ${response.status}`,
-      });
+      return res.status(500).json({ success: false, error: `Failed to fetch from core system. Status: ${response.status}` });
     }
-
     const coreData = await response.json();
     const animeList = Array.isArray(coreData) ? coreData : coreData.data || [];
 
-    const localResult = await pool.query(`
-      SELECT uuid, core_anime_id
-      FROM anime
-    `);
-
+    const localResult = await pool.query('SELECT uuid, core_anime_id FROM anime');
     const localAnime = localResult.rows;
 
     const merged = animeList.map((item) => {
       const match = localAnime.find((a) => a.core_anime_id === item.id) || null;
-
-      return {
-        ...item,
-        uuid: match?.uuid || null,
-        poster_url: item.large_image_url || item.image_url || null,
-      };
+      return { ...item, uuid: match?.uuid || null, poster_url: item.large_image_url || item.image_url || null };
     });
 
-    res.json({
-      success: true,
-      data: merged,
-      count: merged.length,
-    });
+    res.json({ success: true, data: merged, count: merged.length });
   } catch (error) {
     console.error('Error fetching anime:', error);
     res.status(500).json({ success: false, error: error.message });
   }
 });
-// GET single anime
+
 app.get('/api/anime/:id', async (req, res) => {
   try {
     const { id } = req.params;
-
     const response = await fetch('http://152.42.220.220/api/anime');
-
     if (!response.ok) {
-      return res.status(500).json({
-        success: false,
-        error: 'Failed to fetch anime list from core system',
-      });
+      return res.status(500).json({ success: false, error: 'Failed to fetch anime list from core system' });
     }
-
     const coreData = await response.json();
     const animeList = Array.isArray(coreData) ? coreData : coreData.data || [];
-
     const anime = animeList.find((item) => Number(item.id) === Number(id));
 
     if (!anime) {
-      return res.status(404).json({
-        success: false,
-        error: 'Anime not found',
-      });
+      return res.status(404).json({ success: false, error: 'Anime not found' });
     }
 
-    let localResult = await pool.query(
-      `SELECT uuid
-       FROM anime
-       WHERE core_anime_id = $1
-       LIMIT 1`,
-      [id]
-    );
+    let localResult = await pool.query('SELECT uuid FROM anime WHERE core_anime_id = $1 LIMIT 1', [id]);
 
     if (localResult.rows.length === 0) {
-      const inserted = await pool.query(
+      localResult = await pool.query(
         `INSERT INTO anime (uuid, title, poster_url, status, core_anime_id)
-         VALUES (gen_random_uuid(), $1, $2, $3, $4)
-         RETURNING uuid`,
-        [
-          anime.title,
-          anime.large_image_url || anime.image_url || null,
-          anime.status || null,
-          id,
-        ]
+         VALUES (gen_random_uuid(), $1, $2, $3, $4) RETURNING uuid`,
+        [anime.title, anime.large_image_url || anime.image_url || null, anime.status || null, id]
       );
-
-      localResult = inserted;
     }
 
-    const uuid = localResult.rows[0].uuid;
-
-    res.json({
-      success: true,
-      data: {
-        ...anime,
-        uuid,
-      },
-    });
+    res.json({ success: true, data: { ...anime, uuid: localResult.rows[0].uuid } });
   } catch (error) {
     console.error('Error fetching anime detail:', error);
     res.status(500).json({ success: false, error: error.message });
   }
 });
 
-// PUT update anime
 app.put('/api/anime/uuid/:uuid', async (req, res) => {
   try {
     const { uuid } = req.params;
     const { title, poster_url, status } = req.body;
-    
     const result = await pool.query(
-      `UPDATE anime 
-       SET title = COALESCE($1, title), 
-           poster_url = COALESCE($2, poster_url), 
-           status = COALESCE($3, status),
-           updated_at = NOW()
-       WHERE uuid = $4 
-       RETURNING *`,
+      `UPDATE anime SET title = COALESCE($1, title), poster_url = COALESCE($2, poster_url), status = COALESCE($3, status), updated_at = NOW()
+       WHERE uuid = $4 RETURNING *`,
       [title, poster_url, status, uuid]
     );
-    
     if (result.rows.length === 0) {
       return res.status(404).json({ success: false, error: 'Anime not found' });
     }
-    
     res.json({ success: true, data: result.rows[0] });
   } catch (error) {
     console.error('Error updating anime:', error);
@@ -223,19 +139,13 @@ app.put('/api/anime/uuid/:uuid', async (req, res) => {
   }
 });
 
-// DELETE anime
 app.delete('/api/anime/:uuid', async (req, res) => {
   try {
     const { uuid } = req.params;
-    const result = await pool.query(
-      'DELETE FROM anime WHERE uuid = $1 RETURNING *',
-      [uuid]
-    );
-    
+    const result = await pool.query('DELETE FROM anime WHERE uuid = $1 RETURNING *', [uuid]);
     if (result.rows.length === 0) {
       return res.status(404).json({ success: false, error: 'Anime not found' });
     }
-    
     res.json({ success: true, message: 'Anime deleted successfully' });
   } catch (error) {
     console.error('Error deleting anime:', error);
@@ -243,65 +153,67 @@ app.delete('/api/anime/:uuid', async (req, res) => {
   }
 });
 
-// ============= USER ROUTES =============
-
-// GET all users
-app.get('/api/users', async (req, res) => {
+app.post('/api/threads', async (req, res) => {
   try {
-    const result = await pool.query(
-      `SELECT id, username, email, avatar_url, bio, role, is_active, created_at 
-       FROM users ORDER BY created_at DESC`
+    const { forum_id, user_id, anime_uuid, title, slug, content } = req.body;
+
+    const animeResult = await pool.query(
+      'SELECT core_anime_id FROM anime WHERE uuid = $1 LIMIT 1',
+      [anime_uuid]
     );
-    res.json({ success: true, data: result.rows, count: result.rows.length });
+
+    if (animeResult.rows.length === 0) {
+      return res.status(400).json({ success: false, error: 'Invalid anime_uuid' });
+    }
+
+    const coreAnimeId = animeResult.rows[0].core_anime_id;
+
+    const result = await pool.query(
+      `INSERT INTO threads (forum_id, user_id, anime_uuid, core_anime_id, title, slug, content)
+       VALUES ($1, $2, $3, $4, $5, $6, $7) RETURNING *`,
+      [forum_id, user_id, anime_uuid, coreAnimeId, title, slug, content]
+    );
+
+    res.status(201).json({ success: true, data: result.rows[0] });
   } catch (error) {
-    console.error('Error fetching users:', error);
+    console.error('Error creating thread:', error);
     res.status(500).json({ success: false, error: error.message });
   }
 });
 
-// GET single user
+// ============= USER ROUTES =============
+
+app.get("/api/users", async (req, res) => {
+  try {
+    const result = await pool.query(
+      'SELECT id, username, email, avatar_url, bio, role, is_active, created_at FROM users WHERE is_active = true'
+    );
+    res.json({ success: true, data: result.rows });
+  } catch (error) {
+    console.error("Failed to fetch users:", error);
+    res.status(500).json({ success: false, error: "Failed to fetch users" });
+  }
+});
+
 app.get('/api/users/:id', async (req, res) => {
   try {
-    const { id } = req.params;
     const result = await pool.query(
-      `SELECT id, username, email, avatar_url, bio, role, is_active, created_at 
-       FROM users WHERE id = $1`,
-      [id]
+      'SELECT id, username, email, avatar_url, bio, role, is_active, created_at FROM users WHERE id = $1',
+      [req.params.id]
     );
-    
     if (result.rows.length === 0) {
       return res.status(404).json({ success: false, error: 'User not found' });
     }
-    
     res.json({ success: true, data: result.rows[0] });
   } catch (error) {
-    console.error('Error fetching user:', error);
-    res.status(500).json({ success: false, error: error.message });
+    console.error("Failed to fetch user:", error);
+    res.status(500).json({ success: false, error: "Failed to fetch user" });
   }
 });
 
-// POST create user
-app.post('/api/users', async (req, res) => {
-  try {
-    const { username, email, password_hash, avatar_url, bio, role } = req.body;
-    
-    const result = await pool.query(
-      `INSERT INTO users (username, email, password_hash, avatar_url, bio, role) 
-       VALUES ($1, $2, $3, $4, $5, $6) 
-       RETURNING id, username, email, avatar_url, bio, role, is_active, created_at`,
-      [username, email, password_hash, avatar_url, bio, role || 'user']
-    );
-    
-    res.status(201).json({ success: true, data: result.rows[0] });
-  } catch (error) {
-    console.error('Error creating user:', error);
-    res.status(500).json({ success: false, error: error.message });
-  }
-});
 
 // ============= FORUM ROUTES =============
 
-// GET all forums
 app.get('/api/forums', async (req, res) => {
   try {
     const result = await pool.query(
@@ -314,323 +226,169 @@ app.get('/api/forums', async (req, res) => {
   }
 });
 
-// GET single forum with thread count
-app.get('/api/forums/:id', async (req, res) => {
+app.get("/api/forums/:id", async (req, res) => {
   try {
-    const { id } = req.params;
     const result = await pool.query(
-      `SELECT f.*, COUNT(t.id) as thread_count
-       FROM forums f
-       LEFT JOIN threads t ON f.id = t.forum_id
-       WHERE f.id = $1
-       GROUP BY f.id`,
-      [id]
+      'SELECT * FROM forums WHERE id = $1 AND is_active = true',
+      [req.params.id]
     );
-    
     if (result.rows.length === 0) {
       return res.status(404).json({ success: false, error: 'Forum not found' });
     }
-    
     res.json({ success: true, data: result.rows[0] });
   } catch (error) {
-    console.error('Error fetching forum:', error);
+    console.error("Error fetching forum:", error);
     res.status(500).json({ success: false, error: error.message });
   }
 });
+
 
 // ============= THREAD ROUTES =============
 
-// GET all threads with filters
-app.get('/api/threads', async (req, res) => {
+app.get("/api/threads", async (req, res) => {
   try {
-    const { forum_id, anime_uuid, user_id, is_pinned } = req.query;
-    
-    let query = `
-      SELECT t.*, 
-             u.username as author_username,
-             u.avatar_url as author_avatar,
-             a.title as anime_title,
-             f.name as forum_name,
-             COUNT(DISTINCT p.id) as post_count
-      FROM threads t
-      JOIN users u ON t.user_id = u.id
-      JOIN anime a ON t.anime_uuid = a.uuid
-      JOIN forums f ON t.forum_id = f.id
-      LEFT JOIN posts p ON t.id = p.thread_id
-      WHERE t.is_active = true
-    `;
-    
-    const params = [];
-    let paramCount = 1;
-    
-    if (forum_id) {
-      query += ` AND t.forum_id = $${paramCount}`;
-      params.push(forum_id);
-      paramCount++;
-    }
-    
-    if (anime_uuid) {
-      query += ` AND t.anime_uuid = $${paramCount}`;
-      params.push(anime_uuid);
-      paramCount++;
-    }
-    
-    if (user_id) {
-      query += ` AND t.user_id = $${paramCount}`;
-      params.push(user_id);
-      paramCount++;
-    }
-    
-    if (is_pinned !== undefined) {
-      query += ` AND t.is_pinned = $${paramCount}`;
-      params.push(is_pinned);
-      paramCount++;
-    }
-    
-    query += `
-      GROUP BY t.id, u.username, u.avatar_url, a.title, f.name
-      ORDER BY t.is_pinned DESC, t.created_at DESC
-    `;
-    
-    const result = await pool.query(query, params);
-    res.json({ success: true, data: result.rows, count: result.rows.length });
+    const result = await pool.query(
+      'SELECT * FROM threads WHERE is_active = true ORDER BY created_at DESC'
+    );
+    res.json({ success: true, data: result.rows });
   } catch (error) {
-    console.error('Error fetching threads:', error);
+    console.error("Error fetching threads:", error);
     res.status(500).json({ success: false, error: error.message });
   }
 });
 
-// GET single thread with details
 app.get("/api/threads/:id", async (req, res) => {
   try {
-    const { id } = req.params;
     const result = await pool.query(
-      `SELECT t.*, 
-              u.username as author_username,
-              u.avatar_url as author_avatar,
-              u.bio as author_bio,
-              a.title as anime_title,
-              a.poster_url as anime_poster,
-              f.name as forum_name,
-              COUNT(DISTINCT p.id) as post_count
-       FROM threads t
-       JOIN users u ON t.user_id = u.id
-       JOIN anime a ON t.anime_uuid = a.uuid
-       JOIN forums f ON t.forum_id = f.id
-       LEFT JOIN posts p ON t.id = p.thread_id
-       WHERE t.id = $1
-       GROUP BY t.id, u.username, u.avatar_url, u.bio, a.title, a.poster_url, f.name`,
-      [id]
+      'SELECT * FROM threads WHERE id = $1 AND is_active = true',
+      [req.params.id]
     );
-    
     if (result.rows.length === 0) {
       return res.status(404).json({ success: false, error: 'Thread not found' });
     }
-    
-    // Increment view count
-    await pool.query(
-      'UPDATE threads SET views = views + 1 WHERE id = $1',
-      [id]
-    );
-    
     res.json({ success: true, data: result.rows[0] });
   } catch (error) {
-    console.error('Error fetching thread:', error);
+    console.error("Error fetching thread:", error);
     res.status(500).json({ success: false, error: error.message });
   }
 });
 
-
-// GET posts for a thread
-app.get('/api/threads/:threadId/posts', async (req, res) => {
-  try {
-    const { threadId } = req.params;
-    const result = await pool.query(
-      `SELECT p.*, 
-              u.username as author_username,
-              u.avatar_url as author_avatar,
-              u.role as author_role,
-              COUNT(pl.id) as like_count
-       FROM posts p
-       JOIN users u ON p.user_id = u.id
-       LEFT JOIN post_likes pl ON p.id = pl.post_id
-       WHERE p.thread_id = $1 AND p.is_active = true
-       GROUP BY p.id, u.username, u.avatar_url, u.role
-       ORDER BY p.created_at ASC`,
-      [threadId]
-    );
-    
-    res.json({ success: true, data: result.rows, count: result.rows.length });
-  } catch (error) {
-    console.error('Error fetching posts:', error);
-    res.status(500).json({ success: false, error: error.message });
-  }
-});
-
-// POST create post
 app.post('/api/posts', async (req, res) => {
   try {
     const { thread_id, user_id, content } = req.body;
-    
+
+    // Add this validation
+    if (!thread_id || !user_id || !content) {
+      return res.status(400).json({ 
+        success: false, 
+        error: 'thread_id, user_id, and content are required' 
+      });
+    }
+
     const result = await pool.query(
       `INSERT INTO posts (thread_id, user_id, content) 
        VALUES ($1, $2, $3) 
        RETURNING *`,
       [thread_id, user_id, content]
     );
-    
+
     res.status(201).json({ success: true, data: result.rows[0] });
   } catch (error) {
     console.error('Error creating post:', error);
     res.status(500).json({ success: false, error: error.message });
   }
 });
-// ================= ADMIN PAGES (EJS) =================
-
-// LIST anime page (EJS)
-app.get("/dashboard/anime", async (req, res) => {
-  try {
-    const response = await fetch("http://localhost:3003/api/anime");
-    const result = await response.json();
-
-    if (!result.success) {
-      return res.render("anime", { anime: [] });
-    }
-
-    res.render("anime", {
-      anime: result.data || [],
-    });
-  } catch (err) {
-    console.error("Failed to load anime page:", err);
-    res.render("anime", { anime: [] });
-  }
-});
-
-
 
 // ============= POST LIKES ROUTES =============
-
-// POST like a post
-app.post('/api/posts/:postId/like', async (req, res) => {
-  try {
-    const { postId } = req.params;
-    const { user_id } = req.body;
-    
-    const result = await pool.query(
-      `INSERT INTO post_likes (post_id, user_id) 
-       VALUES ($1, $2) 
-       ON CONFLICT (post_id, user_id) DO NOTHING
-       RETURNING *`,
-      [postId, user_id]
-    );
-    
-    if (result.rows.length === 0) {
-      return res.json({ success: true, message: 'Already liked' });
-    }
-    
-    res.status(201).json({ success: true, data: result.rows[0] });
-  } catch (error) {
-    console.error('Error liking post:', error);
-    res.status(500).json({ success: false, error: error.message });
-  }
-});
 
 app.get('/api/posts/:postId/likes', async (req, res) => {
   try {
-    const { id } = req.params;
     const result = await pool.query(
-      'UPDATE posts SET is_active = false WHERE id = $1 RETURNING *',
-      [id]
+      'SELECT COUNT(*) AS like_count FROM post_likes WHERE post_id = $1',
+      [req.params.postId]
     );
-    
-    if (result.rows.length === 0) {
-      return res.status(404).json({ success: false, error: 'Post not found' });
-    }
-    
-    res.json({ success: true, message: 'Post deleted successfully' });
+    res.json({ success: true, data: { post_id: req.params.postId, like_count: Number(result.rows[0].like_count) } });
   } catch (error) {
-    console.error('Error deleting post:', error);
+    console.error('Error fetching post likes:', error);
     res.status(500).json({ success: false, error: error.message });
   }
 });
 
-// ============= POST LIKES ROUTES =============
-
-// POST like a post
-app.post('/api/posts/:postId/like', async (req, res) => {
+app.get('/api/posts/:postId/like/:userId', async (req, res) => {
   try {
-    const { postId } = req.params;
-    const { user_id } = req.body;
-    
+    const { postId, userId } = req.params;
     const result = await pool.query(
-      `INSERT INTO post_likes (post_id, user_id) 
-       VALUES ($1, $2) 
-       ON CONFLICT (post_id, user_id) DO NOTHING
-       RETURNING *`,
-      [postId, user_id]
+      'SELECT * FROM post_likes WHERE post_id = $1 AND user_id = $2',
+      [postId, userId]
     );
-    
-    if (result.rows.length === 0) {
-      return res.json({ success: true, message: 'Already liked' });
-    }
-    
-    res.status(201).json({ success: true, data: result.rows[0] });
+    res.json({ success: true, liked: result.rows.length > 0 });
   } catch (error) {
-    console.error('Error liking post:', error);
+    console.error('Error checking like:', error);
     res.status(500).json({ success: false, error: error.message });
   }
 });
 
 app.get('/api/posts/:postId/likes/users', async (req, res) => {
   try {
-    const { postId } = req.params;
-
     const result = await pool.query(
-      `SELECT u.id, u.username, u.avatar_url
-       FROM post_likes pl
-       JOIN users u ON pl.user_id = u.id
-       WHERE pl.post_id = $1`,
-      [postId]
+      `SELECT u.id, u.username, u.avatar_url FROM post_likes pl
+       JOIN users u ON pl.user_id = u.id WHERE pl.post_id = $1`,
+      [req.params.postId]
     );
-
-    res.json({
-      success: true,
-      data: result.rows,
-      count: result.rows.length
-    });
+    res.json({ success: true, data: result.rows, count: result.rows.length });
   } catch (error) {
     console.error('Error fetching likes users:', error);
     res.status(500).json({ success: false, error: error.message });
   }
 });
 
-// DELETE unlike a post
-app.delete('/api/posts/:postId/like', async (req, res) => {
+
+// ============= SEARCH =============
+
+app.get('/api/search', async (req, res) => {
   try {
-    const { postId } = req.params;
-    const { user_id } = req.body;
-    
-    const result = await pool.query(
-      'DELETE FROM post_likes WHERE post_id = $1 AND user_id = $2 RETURNING *',
-      [postId, user_id]
-    );
-    
-    if (result.rows.length === 0) {
-      return res.status(404).json({ success: false, error: 'Like not found' });
+    const { q, type } = req.query;
+    if (!q) return res.status(400).json({ success: false, error: 'Search query required' });
+
+    const searchTerm = `%${q}%`;
+    let results = {};
+
+    if (!type || type === 'threads') {
+      const r = await pool.query(
+        `SELECT t.*, u.username FROM threads t
+         JOIN users u ON t.user_id = u.id
+         WHERE (t.title ILIKE $1 OR t.content ILIKE $1) AND t.is_active = true LIMIT 20`,
+        [searchTerm]
+      );
+      results.threads = r.rows;
     }
-    
-    res.json({ success: true, message: 'Post unliked successfully' });
+
+    if (!type || type === 'anime') {
+      const r = await pool.query('SELECT * FROM anime WHERE title ILIKE $1 LIMIT 20', [searchTerm]);
+      results.anime = r.rows;
+    }
+
+    if (!type || type === 'users') {
+      const r = await pool.query(
+        `SELECT id, username, avatar_url, bio, role FROM users
+         WHERE (username ILIKE $1 OR bio ILIKE $1) AND is_active = true LIMIT 20`,
+        [searchTerm]
+      );
+      results.users = r.rows;
+    }
+
+    res.json({ success: true, query: q, results });
   } catch (error) {
-    console.error('Error unliking post:', error);
+    console.error('Error searching:', error);
     res.status(500).json({ success: false, error: error.message });
   }
 });
+
 
 // ============= DASHBOARD REPORT =============
 
 app.get('/api/dashboard/report', async (req, res) => {
   try {
-    // Get overall statistics
     const statsResult = await pool.query(`
       SELECT 
         (SELECT COUNT(*) FROM users WHERE is_active = true) as total_users,
@@ -640,294 +398,121 @@ app.get('/api/dashboard/report', async (req, res) => {
         (SELECT COUNT(*) FROM posts WHERE is_active = true) as total_posts,
         (SELECT COUNT(*) FROM post_likes) as total_likes
     `);
-    
-    // Get most active users
+
     const activeUsersResult = await pool.query(`
-      SELECT 
-        u.id, 
-        u.username, 
-        u.avatar_url,
-        COUNT(DISTINCT p.id) as post_count,
-        COUNT(DISTINCT t.id) as thread_count
+      SELECT u.id, u.username, u.avatar_url,
+        COUNT(DISTINCT p.id) as post_count, COUNT(DISTINCT t.id) as thread_count
       FROM users u
       LEFT JOIN posts p ON u.id = p.user_id
       LEFT JOIN threads t ON u.id = t.user_id
       WHERE u.is_active = true
       GROUP BY u.id, u.username, u.avatar_url
-      ORDER BY post_count DESC, thread_count DESC
-      LIMIT 10
+      ORDER BY post_count DESC LIMIT 10
     `);
-    
-    // Get most popular anime
+
     const popularAnimeResult = await pool.query(`
-      SELECT 
-        a.uuid,
-        a.title,
-        a.poster_url,
-        a.status,
-        COUNT(DISTINCT t.id) as thread_count,
-        SUM(t.views) as total_views
+      SELECT a.uuid, a.title, a.poster_url, a.status,
+        COUNT(DISTINCT t.id) as thread_count, SUM(t.views) as total_views
       FROM anime a
       LEFT JOIN threads t ON a.uuid = t.anime_uuid
       GROUP BY a.uuid, a.title, a.poster_url, a.status
-      ORDER BY thread_count DESC, total_views DESC
-      LIMIT 10
+      ORDER BY thread_count DESC LIMIT 10
     `);
-    
-    // Get most active forums
+
     const activeForumsResult = await pool.query(`
-      SELECT 
-        f.id,
-        f.name,
-        f.slug,
-        f.icon,
-        COUNT(DISTINCT t.id) as thread_count,
-        COUNT(DISTINCT p.id) as post_count
+      SELECT f.id, f.name, f.slug, f.icon,
+        COUNT(DISTINCT t.id) as thread_count, COUNT(DISTINCT p.id) as post_count
       FROM forums f
       LEFT JOIN threads t ON f.id = t.forum_id
       LEFT JOIN posts p ON t.id = p.thread_id
       WHERE f.is_active = true
       GROUP BY f.id, f.name, f.slug, f.icon
-      ORDER BY thread_count DESC, post_count DESC
+      ORDER BY thread_count DESC
     `);
-    
-    // Get recent activity
-    const recentActivityResult = await pool.query(`
-      SELECT 
-        'thread' as activity_type,
-        t.id,
-        t.title,
-        t.created_at,
-        u.username,
-        u.avatar_url,
-        a.title as anime_title
-      FROM threads t
-      JOIN users u ON t.user_id = u.id
-      JOIN anime a ON t.anime_uuid = a.uuid
-      WHERE t.is_active = true
-      ORDER BY t.created_at DESC
-      LIMIT 5
-    `);
-    
-    // Get thread engagement statistics
-    const threadEngagementResult = await pool.query(`
-      SELECT 
-        t.id,
-        t.title,
-        t.views,
-        COUNT(DISTINCT p.id) as reply_count,
-        COUNT(DISTINCT pl.id) as like_count,
-        a.title as anime_title,
-        f.name as forum_name
-      FROM threads t
-      JOIN anime a ON t.anime_uuid = a.uuid
-      JOIN forums f ON t.forum_id = f.id
-      LEFT JOIN posts p ON t.id = p.thread_id
-      LEFT JOIN post_likes pl ON p.id = pl.post_id
-      WHERE t.is_active = true
-      GROUP BY t.id, t.title, t.views, a.title, f.name
-      ORDER BY t.views DESC, reply_count DESC
-      LIMIT 10
-    `);
-    
-    // Get user role distribution
+
     const userRolesResult = await pool.query(`
-      SELECT 
-        role,
-        COUNT(*) as count
-      FROM users
-      WHERE is_active = true
-      GROUP BY role
-      ORDER BY count DESC
+      SELECT role, COUNT(*) as count FROM users WHERE is_active = true GROUP BY role ORDER BY count DESC
     `);
-    
-    // Get anime status distribution
+
     const animeStatusResult = await pool.query(`
-      SELECT 
-        status,
-        COUNT(*) as count
-      FROM anime
-      GROUP BY status
-      ORDER BY count DESC
+      SELECT status, COUNT(*) as count FROM anime GROUP BY status ORDER BY count DESC
     `);
-    
-    const report = {
+
+    res.json({
       success: true,
       generated_at: new Date().toISOString(),
       statistics: statsResult.rows[0],
       most_active_users: activeUsersResult.rows,
       most_popular_anime: popularAnimeResult.rows,
       most_active_forums: activeForumsResult.rows,
-      recent_activity: recentActivityResult.rows,
-      top_threads_by_engagement: threadEngagementResult.rows,
       user_role_distribution: userRolesResult.rows,
-      anime_status_distribution: animeStatusResult.rows
-    };
-    
-    res.json(report);
+      anime_status_distribution: animeStatusResult.rows,
+    });
   } catch (error) {
     console.error('Error generating dashboard report:', error);
     res.status(500).json({ success: false, error: error.message });
   }
 });
 
-// ============= SEARCH ROUTES =============
 
-app.get('/api/search', async (req, res) => {
-  try {
-    const { q, type } = req.query;
-    
-    if (!q) {
-      return res.status(400).json({ success: false, error: 'Search query required' });
-    }
-    
-    const searchTerm = `%${q}%`;
-    let results = {};
-    
-    if (!type || type === 'threads') {
-      const threadsResult = await pool.query(
-        `SELECT t.*, u.username, a.title as anime_title
-         FROM threads t
-         JOIN users u ON t.user_id = u.id
-         JOIN anime a ON t.anime_uuid = a.uuid
-         WHERE (t.title ILIKE $1 OR t.content ILIKE $1) AND t.is_active = true
-         LIMIT 20`,
-        [searchTerm]
-      );
-      results.threads = threadsResult.rows;
-    }
-    
-    if (!type || type === 'anime') {
-      const animeResult = await pool.query(
-        'SELECT * FROM anime WHERE title ILIKE $1 LIMIT 20',
-        [searchTerm]
-      );
-      results.anime = animeResult.rows;
-    }
-    
-    if (!type || type === 'users') {
-      const usersResult = await pool.query(
-        `SELECT id, username, avatar_url, bio, role 
-         FROM users 
-         WHERE (username ILIKE $1 OR bio ILIKE $1) AND is_active = true
-         LIMIT 20`,
-        [searchTerm]
-      );
-      results.users = usersResult.rows;
-    }
-    
-    res.json({ success: true, query: q, results });
-  } catch (error) {
-    console.error('Error searching:', error);
-    res.status(500).json({ success: false, error: error.message });
-  }
-});
+// ============= VIEWS / ADMIN =============
 
-
-// Health check endpoint
 app.get('/health', (req, res) => {
   res.json({ status: 'OK', timestamp: new Date().toISOString() });
 });
 
-app.get("/", (req, res) => {
-  res.render("login");
+app.get("/", (req, res) => res.render("login"));
+app.get("/dashboard", (req, res) => res.render("dashboard"));
+
+app.get("/dashboard/anime", async (req, res) => {
+  try {
+    const response = await fetch("http://152.42.177.225/api/anime");
+    const result = await response.json();
+    res.render("anime", { anime: result.success ? result.data || [] : [] });
+  } catch (err) {
+    console.error("Failed to load anime page:", err);
+    res.render("anime", { anime: [] });
+  }
 });
 
 app.get("/users", async (req, res) => {
   try {
-    const q = (req.query.q || "").trim();
-    const page = Math.max(parseInt(req.query.page || "1", 10), 1);
-    const limit = 10;
-    const offset = (page - 1) * limit;
-
-    const params = [];
-    let where = "WHERE is_active = true";
-
-    if (q) {
-      params.push(`%${q}%`);
-      where += ` AND (username ILIKE $1 OR email ILIKE $1 OR bio ILIKE $1)`;
-    }
-
-    const countSql = `SELECT COUNT(*)::int AS total FROM users ${where}`;
-    const countResult = await pool.query(countSql, params);
-    const total = countResult.rows[0]?.total ?? 0;
-    const totalPages = Math.max(1, Math.ceil(total / limit));
-
-    params.push(limit, offset);
-
-    const listSql = `
-      SELECT id, username, email, avatar_url, bio, role, is_active, created_at
-      FROM users
-      ${where}
-      ORDER BY created_at DESC
-      LIMIT $${params.length - 1} OFFSET $${params.length}
-    `;
-
-    const usersResult = await pool.query(listSql, params);
-
-    res.render("user", {
-      title: "Users",
-      users: usersResult.rows,
-      q,
-      page,
-      total,
-      totalPages,
-    });
+    const result = await pool.query(
+      'SELECT id, username, email, avatar_url, bio, role, is_active FROM users WHERE is_active = true'
+    );
+    res.render("user", { users: result.rows });
   } catch (error) {
-    console.error(error);
-    res.status(500).send("Failed to load users page");
+    console.error("Failed to load users page:", error);
+    res.render("user", { users: [] });
   }
 });
 
-// Show create user form
 app.get("/admin/users/create", (req, res) => {
   res.render("user-create", { error: null, success: null });
 });
 
-// Handle create user form submit
 app.post("/admin/users/create", async (req, res) => {
   try {
     const { username, email, password, avatar_url, bio, role } = req.body;
     const is_active = req.body.is_active ? true : false;
 
-    // basic validation
     if (!username || !email || !password) {
-      return res
-        .status(400)
-        .render("user-create", { error: "Missing required fields.", success: null });
+      return res.status(400).render("user-create", { error: "Missing required fields.", success: null });
     }
 
-    // hash password
     const password_hash = await bcrypt.hash(password, 10);
-
-    // insert
     const result = await pool.query(
       `INSERT INTO users (username, email, password_hash, avatar_url, bio, role, is_active)
-       VALUES ($1,$2,$3,$4,$5,$6,$7)
-       RETURNING id, username, email, role`,
+       VALUES ($1,$2,$3,$4,$5,$6,$7) RETURNING id, username, email, role`,
       [username, email, password_hash, avatar_url || null, bio || null, role || "user", is_active]
     );
 
-    return res.render("user-create", {
-      error: null,
-      success: `User created successfully (ID: ${result.rows[0].id})`,
-    });
+    res.render("user-create", { error: null, success: `User created successfully (ID: ${result.rows[0].id})` });
   } catch (error) {
     console.error("Create user error:", error);
-
-    // common error: duplicate email
-    const msg =
-      String(error.message).includes("users_email_key")
-        ? "Email already exists."
-        : error.message;
-
-    return res.status(500).render("user-create", { error: msg, success: null });
+    const msg = String(error.message).includes("users_email_key") ? "Email already exists." : error.message;
+    res.status(500).render("user-create", { error: msg, success: null });
   }
-});
-
-
-app.get("/dashboard", (req, res) => {
-  res.render("dashboard");
 });
 
 
@@ -936,7 +521,6 @@ app.use((req, res) => {
   res.status(404).json({ success: false, error: 'Endpoint not found' });
 });
 
-// Start server
 app.listen(PORT, () => {
   console.log(`Server running on port ${PORT}`);
   console.log(`Health check: http://localhost:${PORT}/health`);
