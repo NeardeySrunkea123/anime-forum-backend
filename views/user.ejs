@@ -9,7 +9,7 @@
 </head>
 
 <body class="bg-gray-100">
-    <div class="flex h-screen">
+    <div class="flex min-h-screen">
 
         <!-- Sidebar -->
         <aside class="w-64 bg-white shadow flex flex-col">
@@ -19,8 +19,7 @@
 
             <nav class="flex-1 px-4 py-6 space-y-2">
                 <a href="/dashboard" class="block px-4 py-2 rounded-lg text-gray-700 hover:bg-gray-100">Dashboard</a>
-                <a href="/users" class="block px-4 py-2 rounded-lg text-gray-700 hover:bg-gray-100">Users</a>
-                <a href="/dashboard/anime" class="block px-4 py-2 rounded-lg text-gray-700 hover:bg-gray-100">Anime</a>
+                <a href="/users" class="block px-4 py-2 rounded-lg bg-blue-50 text-blue-700 font-medium">Users</a>
             </nav>
 
             <div class="p-4 text-xs text-gray-500 border-t text-center">
@@ -30,7 +29,13 @@
 
         <!-- Main Content -->
         <main class="flex-1 p-8 overflow-y-auto">
-            <!-- Table -->
+            <div class="mb-6 flex items-center justify-between">
+                <div>
+                    <h2 class="text-3xl font-bold text-gray-800">User Management</h2>
+                    <p class="mt-1 text-sm text-gray-500">Manage forum users and roles</p>
+                </div>
+            </div>
+
             <div class="bg-white rounded-xl shadow overflow-hidden">
                 <table class="w-full text-sm text-left">
                     <thead class="bg-gray-50 text-gray-600 uppercase text-xs">
@@ -39,7 +44,6 @@
                             <th class="px-6 py-3">Username</th>
                             <th class="px-6 py-3">Email</th>
                             <th class="px-6 py-3">Role</th>
-                            <th class="px-6 py-3">Actions</th>
                         </tr>
                     </thead>
 
@@ -51,7 +55,7 @@
                                 </td>
                             </tr>
                             <% } else { %>
-                                <% users.forEach(user=> { %>
+                                <% users.forEach((user)=> { %>
                                     <tr class="hover:bg-gray-50">
                                         <td class="px-6 py-4">
                                             <%= user.id %>
@@ -67,22 +71,13 @@
                                                 <%= user.role %>
                                             </span>
                                         </td>
-                                        <td class="px-6 py-4 space-x-2">
-                                            <a href="/admin/users/edit/<%= user.id %>" class="text-blue-600 hover:underline">
-                                                ✏️ Edit
-                                            </a>
-                                            <a href="/admin/users/delete/<%= user.id %>" onclick="return confirm('Delete user?')"
-                                                class="text-red-600 hover:underline">
-                                                🗑 Delete
-                                            </a>
-                                        </td>
+                                        
                                     </tr>
                                     <% }) %>
-                                <% } %>            
-                        </tbody>
+                                        <% } %>
+                    </tbody>
                 </table>
             </div>
-
         </main>
     </div>
 </body>
