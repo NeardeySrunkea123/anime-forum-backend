@@ -376,7 +376,7 @@ app.get("/api/threads/:id", async (req, res) => {
 app.get('/api/threads/:id/posts', async (req, res) => {
   try {
     const { id } = req.params;
-    const userId = 1;
+    const userId = req.query.user_id || 0; 
 
     const result = await pool.query(
       `
