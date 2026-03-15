@@ -332,6 +332,45 @@ app.get('/api/threads/:id', async (req, res) => {
 });
 
 // POST create thread
+// Before inserting thread, upsert the user from core
+app.post('/api/threads', async (req, res) => {
+  const { user_id, title, content, anime_uuid } = req.body;
+
+  try {
+    // 1. Check if user exists locally
+    const userExists = await db.query(
+      'SELECT id FROM users WHERE id = $1', 
+      [user_id]
+    );
+
+    // 2. If not, fetch from core and insert locally
+    if (userExists.rows.length === 0) {
+      const coreRes = await fetch(`http://152.42.220.220/api/users/${user_id}`);
+      const coreUser = await coreRes.json();
+
+      await db.query(
+        `INSERT INTO users (id, username, email, role, created_at, updated_at)
+         VALUES ($1, $2, $3, $4, $5, $6)
+         ON CONFLICT (id) DO NOTHING`,
+        [coreUser.id, coreUser.username, coreUser.email, coreUser.role, coreUser.created_at, coreUser.updated_at]
+      );
+    }
+
+    // 3. Now safely insert the thread
+    const result = await db.query(
+      `INSERT INTO threads (user_id, title, content, anime_uuid)
+       VALUES ($1, $2, $3, $4) RETURNING *`,
+      [user_id, title, content, anime_uuid]
+    );
+
+    res.json({ success: true, data: result.rows[0] });
+
+  } catch (error) {
+    console.error('Thread creation error:', error);
+    res.status(500).json({ success: false, message: error.message });
+  }
+});
+
 app.get('/api/threads', async (req, res) => {
   try {
     const { forum_id, anime_uuid, user_id, is_pinned } = req.query;
