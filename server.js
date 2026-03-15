@@ -192,36 +192,57 @@ app.post("/api/login", async (req, res) => {
   }
 });
 
+// POST create thread
 app.post('/api/threads', async (req, res) => {
-  try {
-    const { forum_id, user_id, anime_uuid, title, slug, content } = req.body;
+  const { user_id, title, content, anime_uuid, forum_id } = req.body;
 
-    const animeResult = await pool.query(
-      'SELECT core_anime_id FROM anime WHERE uuid = $1 LIMIT 1',
-      [anime_uuid]
+  try {
+    // 1. Check if user exists locally
+    const userCheck = await pool.query(
+      'SELECT id FROM users WHERE id = $1',
+      [user_id]
     );
 
-    if (animeResult.rows.length === 0) {
-      return res.status(400).json({ success: false, error: 'Invalid anime_uuid' });
+    // 2. If not found, fetch from core and insert locally
+    if (userCheck.rows.length === 0) {
+      console.log(`User ${user_id} not found locally, fetching from core...`);
+
+      const coreRes = await fetch(`http://152.42.220.220/api/users/${user_id}`);
+      const coreData = await coreRes.json();
+      const coreUser = coreData.data || coreData;
+
+      await pool.query(
+        `INSERT INTO users (id, username, email, role, created_at, updated_at)
+         VALUES ($1, $2, $3, $4, $5, $6)
+         ON CONFLICT (id) DO NOTHING`,
+        [
+          coreUser.id,
+          coreUser.username,
+          coreUser.email,
+          coreUser.role || 'user',
+          coreUser.created_at || new Date(),
+          coreUser.updated_at || new Date()
+        ]
+      );
+
+      console.log(`User ${user_id} synced successfully.`);
     }
 
-    const coreAnimeId = animeResult.rows[0].core_anime_id;
-
+    // 3. Insert thread
     const result = await pool.query(
-      `INSERT INTO threads (forum_id, user_id, anime_uuid, core_anime_id, title, slug, content)
-       VALUES ($1, $2, $3, $4, $5, $6, $7) RETURNING *`,
-      [forum_id, user_id, anime_uuid, coreAnimeId, title, slug, content]
+      `INSERT INTO threads (user_id, title, content, anime_uuid, forum_id, created_at, updated_at)
+       VALUES ($1, $2, $3, $4, $5, NOW(), NOW())
+       RETURNING *`,
+      [user_id, title, content, anime_uuid, forum_id]
     );
 
-    await logToCore(user_id, "CREATE_THREAD", `Created thread: ${title}`);
-
     res.status(201).json({ success: true, data: result.rows[0] });
+
   } catch (error) {
     console.error('Error creating thread:', error);
-    res.status(500).json({ success: false, error: error.message });
+    res.status(500).json({ success: false, message: error.message });
   }
 });
-
 // ============= USER ROUTES =============
 
 app.get("/users", async (req, res) => {
