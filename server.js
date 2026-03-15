@@ -197,44 +197,35 @@ app.post('/api/threads', async (req, res) => {
   const { user_id, title, content, anime_uuid, forum_id } = req.body;
 
   try {
-    // 1. Check if user exists locally
-    const userCheck = await pool.query(
-      'SELECT id FROM users WHERE id = $1',
-      [user_id]
-    );
+    const userCheck = await pool.query('SELECT id FROM users WHERE id = $1', [user_id]);
 
-    // 2. If not found, fetch from core and insert locally
     if (userCheck.rows.length === 0) {
-      console.log(`User ${user_id} not found locally, fetching from core...`);
-
       const coreRes = await fetch(`http://152.42.220.220/api/users/${user_id}`);
       const coreData = await coreRes.json();
       const coreUser = coreData.data || coreData;
 
       await pool.query(
         `INSERT INTO users (id, username, email, password_hash, role, created_at, updated_at)
-         VALUES ($1, $2, $3, $4, $5, $6, $7)
+         VALUES ($1, $2, $3, 'core_managed', $4, $5, $6)
          ON CONFLICT (id) DO NOTHING`,
-        [
-          coreUser.id,
-          coreUser.username,
-          coreUser.email,
-          'core_managed',        // ← ADD THIS placeholder
-          coreUser.role || 'user',
-          coreUser.created_at || new Date(),
-          coreUser.updated_at || new Date()
-        ]
+        [coreUser.id, coreUser.username, coreUser.email, coreUser.role || 'user',
+         coreUser.created_at || new Date(), coreUser.updated_at || new Date()]
       );
-
-      console.log(`User ${user_id} synced successfully.`);
     }
 
-    // 3. Insert thread
+    // Generate slug from title + timestamp
+    const slug = title
+      .toLowerCase()
+      .replace(/[^a-z0-9\s-]/g, '')   // remove special chars
+      .replace(/\s+/g, '-')            // spaces to dashes
+      .substring(0, 80)                // max 80 chars
+      + '-' + Date.now();              // add timestamp to ensure uniqueness
+
     const result = await pool.query(
-      `INSERT INTO threads (user_id, title, content, anime_uuid, forum_id, created_at, updated_at)
-       VALUES ($1, $2, $3, $4, $5, NOW(), NOW())
+      `INSERT INTO threads (user_id, title, slug, content, anime_uuid, forum_id, created_at, updated_at)
+       VALUES ($1, $2, $3, $4, $5, $6, NOW(), NOW())
        RETURNING *`,
-      [user_id, title, content, anime_uuid, forum_id]
+      [user_id, title, slug, content, anime_uuid, forum_id]
     );
 
     res.status(201).json({ success: true, data: result.rows[0] });
