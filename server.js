@@ -212,13 +212,14 @@ app.post('/api/threads', async (req, res) => {
       const coreUser = coreData.data || coreData;
 
       await pool.query(
-        `INSERT INTO users (id, username, email, role, created_at, updated_at)
-         VALUES ($1, $2, $3, $4, $5, $6)
+        `INSERT INTO users (id, username, email, password_hash, role, created_at, updated_at)
+         VALUES ($1, $2, $3, $4, $5, $6, $7)
          ON CONFLICT (id) DO NOTHING`,
         [
           coreUser.id,
           coreUser.username,
           coreUser.email,
+          'core_managed',        // ← ADD THIS placeholder
           coreUser.role || 'user',
           coreUser.created_at || new Date(),
           coreUser.updated_at || new Date()
@@ -430,30 +431,26 @@ app.post('/api/posts', async (req, res) => {
   try {
     const { thread_id, user_id, content } = req.body;
 
-    if (!thread_id || !user_id || !content) {
-      return res.status(400).json({
-        success: false,
-        error: 'thread_id, user_id, and content are required'
-      });
+    // Sync user from core if not exists locally
+    const userCheck = await pool.query('SELECT id FROM users WHERE id = $1', [user_id]);
+    if (userCheck.rows.length === 0) {
+      const coreRes = await fetch(`http://152.42.220.220/api/users/${user_id}`);
+      const coreData = await coreRes.json();
+      const coreUser = coreData.data || coreData;
+
+      await pool.query(
+        `INSERT INTO users (id, username, email, password_hash, role, created_at, updated_at)
+         VALUES ($1, $2, $3, 'core_managed', $4, $5, $6)
+         ON CONFLICT (id) DO NOTHING`,
+        [coreUser.id, coreUser.username, coreUser.email, coreUser.role || 'user',
+         coreUser.created_at || new Date(), coreUser.updated_at || new Date()]
+      );
     }
 
+    // Now insert post
     const result = await pool.query(
-      `INSERT INTO posts (thread_id, user_id, content)
-       VALUES ($1, $2, $3)
-       RETURNING *`,
+      `INSERT INTO posts (thread_id, user_id, content) VALUES ($1, $2, $3) RETURNING *`,
       [thread_id, user_id, content]
-    );
-
-    await pool.query(
-      `
-      UPDATE threads
-      SET replies_count = (
-        SELECT COUNT(*) FROM posts WHERE thread_id = $1
-      ),
-      last_reply_at = NOW()
-      WHERE id = $1
-      `,
-      [thread_id]
     );
 
     res.status(201).json({ success: true, data: result.rows[0] });
